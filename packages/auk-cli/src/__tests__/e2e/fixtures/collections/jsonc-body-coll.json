@@ -1,0 +1,74 @@
+{
+  "v": 11,
+  "name": "JSONC Body Test Collection",
+  "folders": [],
+  "requests": [
+    {
+      "v": "17",
+      "auth": {
+        "authType": "inherit",
+        "authActive": true
+      },
+      "body": {
+        "body": "{\n  \"key1\": \"value1\", // inline comment\n  \"key2\": \"value2\" // another comment\n}",
+        "contentType": "application/json"
+      },
+      "name": "Echo with inline comments",
+      "method": "POST",
+      "params": [],
+      "headers": [],
+      "endpoint": "https://echo.mamahuhu.dev",
+      "testScript": "auk.test('Should successfully parse JSONC with comments', () => {\n  auk.expect(auk.response.statusCode).toBe(200);\n  const data = JSON.parse(auk.response.body.asJSON().data);\n  auk.expect(data.key1).toBe('value1');\n  auk.expect(data.key2).toBe('value2');\n});",
+      "preRequestScript": "",
+      "requestVariables": [],
+      "responses": {}
+    },
+    {
+      "v": "17",
+      "auth": {
+        "authType": "inherit",
+        "authActive": true
+      },
+      "body": {
+        "body": "{\n  /* Multi-line comment\n     should also work */\n  \"message\": \"test\",\n  \"nested\": {\n    \"field\": \"value\" // another comment\n  }\n}",
+        "contentType": "application/json"
+      },
+      "name": "Echo with multiline comments",
+      "method": "POST",
+      "params": [],
+      "headers": [],
+      "endpoint": "https://echo.mamahuhu.dev",
+      "testScript": "auk.test('Should successfully parse JSONC with multiline comments', () => {\n  auk.expect(auk.response.statusCode).toBe(200);\n  const data = JSON.parse(auk.response.body.asJSON().data);\n  auk.expect(data.message).toBe('test');\n  auk.expect(data.nested.field).toBe('value');\n});",
+      "preRequestScript": "",
+      "requestVariables": [],
+      "responses": {}
+    },
+    {
+      "v": "17",
+      "auth": {
+        "authType": "inherit",
+        "authActive": true
+      },
+      "body": {
+        "body": "{\n  \"key\": \"value\",\n  \"count\": 42,\n}",
+        "contentType": "application/json"
+      },
+      "name": "Echo with trailing commas",
+      "method": "POST",
+      "params": [],
+      "headers": [],
+      "endpoint": "https://echo.mamahuhu.dev",
+      "testScript": "auk.test('Should successfully parse JSONC with trailing commas', () => {\n  auk.expect(auk.response.statusCode).toBe(200);\n  const data = JSON.parse(auk.response.body.asJSON().data);\n  auk.expect(data.key).toBe('value');\n  auk.expect(data.count).toBe(42);\n});",
+      "preRequestScript": "",
+      "requestVariables": [],
+      "responses": {}
+    }
+  ],
+  "auth": {
+    "authType": "inherit",
+    "authActive": true
+  },
+  "headers": [],
+  "variables": [],
+  "description": ""
+}

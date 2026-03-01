@@ -1,0 +1,48 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [main, next, patch]
+  pull_request:
+    branches: [main, next, patch]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        # Pinned to Node.js 22 due to known test failures on Node.js 24.
+        # Future TODO: Investigate test failures and move to Node.js 24 (Active LTS).
+        node-version: [22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Check workspace scripts
+        run: pnpm run check:workspace-scripts
+
+      - name: Run typecheck
+        run: pnpm run typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Run workspace/sync critical tests with coverage gate
+        run: pnpm --filter @auk/common run test:workspace-sync

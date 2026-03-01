@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Auk",
+  "version": "26.2.0",
+  "identifier": "io.mamahuhu.auk",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Auk",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 15,
+          "y": 25
+        }
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "blob: data: filesystem: ws: wss: http: https: tauri: 'unsafe-eval' 'unsafe-inline' 'self' customprotocol: asset:",
+        "script-src": "* 'self' 'unsafe-eval' 'wasm-unsafe-eval' 'unsafe-inline'",
+        "connect-src": "ipc: http://ipc.localhost data: *",
+        "font-src": "https://fonts.gstatic.com data: 'self' *",
+        "img-src": "'self' asset: http://asset.localhost blob: data: customprotocol: *",
+        "style-src": "'unsafe-inline' 'self' https://fonts.googleapis.com data: asset: *",
+        "worker-src": "* 'self' data: 'unsafe-eval' blob:"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["io.mamahuhu.auk"]
+      }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/mamahuhu-io/auk/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYyRDU2MDc4MjZBODQwODkKUldTSlFLZ21lR0RWWWxzYjdiSHdYS2kyS3p5eTh3dHIyY1FSWnZySSswQ2NRQUVYTzRpMXd1RlQK"
+    }
+  }
+}

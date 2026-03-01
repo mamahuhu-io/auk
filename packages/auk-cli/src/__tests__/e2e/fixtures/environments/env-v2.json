@@ -1,0 +1,13 @@
+{
+  "id": "env-v2",
+  "v": 2,
+  "name": "env-v2",
+  "variables": [
+    {
+      "key": "baseURL",
+      "initialValue": "https://echo.mamahuhu.dev",
+      "currentValue": "https://echo.mamahuhu.dev",
+      "secret": false
+    }
+  ]
+}

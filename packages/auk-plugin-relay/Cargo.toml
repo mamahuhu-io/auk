@@ -1,0 +1,19 @@
+[package]
+name = "tauri-plugin-relay"
+version = "0.1.0"
+authors = [ "Mamahuhu" ]
+description = ""
+edition = "2021"
+rust-version = "1.77.2"
+exclude = ["/examples", "/webview-dist", "/webview-src", "/node_modules"]
+links = "tauri-plugin-relay"
+
+[dependencies]
+tauri = { version = "2.10.2" }
+serde = "1.0"
+thiserror = "2.0.18"
+tracing = "0.1.44"
+relay = { path = "../auk-relay" }
+
+[build-dependencies]
+tauri-plugin = { version = "2.5.3", features = ["build"] }

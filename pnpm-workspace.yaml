@@ -1,0 +1,11 @@
+packages:
+  - 'packages/auk-common'
+  - 'packages/auk-data'
+  - 'packages/auk-kernel'
+  - 'packages/auk-js-sandbox'
+  - 'packages/auk-desktop'
+  - 'packages/auk-plugin-relay'
+  - 'packages/auk-relay'
+  - 'packages/auk-cli'
+  - 'packages/auk-ui'
+  - 'packages/codemirror-lang-graphql'

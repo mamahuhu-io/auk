@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Main Bundle",
+    "path": "dist/index.js",
+    "limit": "100 KB",
+    "gzip": true
+  },
+  {
+    "name": "CSS Bundle",
+    "path": "dist/style.css",
+    "limit": "40 KB",
+    "gzip": true
+  },
+  {
+    "name": "Theme CSS",
+    "path": "dist/themes.css",
+    "limit": "20 KB",
+    "gzip": true
+  }
+]

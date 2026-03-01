@@ -1,0 +1,8 @@
+.dependabot
+.github
+.auk
+.vscode
+package-lock.json
+node_modules
+dist
+lib

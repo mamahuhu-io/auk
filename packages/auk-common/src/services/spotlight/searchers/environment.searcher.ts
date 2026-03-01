@@ -1,0 +1,377 @@
+import {
+  Component,
+  Ref,
+  computed,
+  effectScope,
+  markRaw,
+  reactive,
+  ref,
+  watch,
+} from "vue"
+import { activeActions$, invokeAction } from "~/helpers/actions"
+import { getI18n } from "~/modules/i18n"
+import {
+  SpotlightSearcher,
+  SpotlightSearcherResult,
+  SpotlightSearcherSessionState,
+  SpotlightService,
+} from ".."
+import {
+  SearchResult,
+  StaticSpotlightSearcherService,
+} from "./base/static.searcher"
+
+import IconCopy from "~icons/lucide/copy"
+import IconEdit from "~icons/lucide/edit"
+import IconLayers from "~icons/lucide/layers"
+import IconTrash2 from "~icons/lucide/trash-2"
+
+import { Container, Service } from "dioc"
+import { cloneDeep } from "lodash-es"
+import MiniSearch from "minisearch"
+import { map } from "rxjs"
+import { useStreamStatic } from "~/composables/stream"
+import {
+  SelectedEnvironmentIndex,
+  createEnvironment,
+  currentEnvironment$,
+  duplicateEnvironment,
+  environmentsStore,
+  getGlobalVariables,
+  selectedEnvironmentIndex$,
+  setSelectedEnvironmentIndex,
+} from "~/store/environments"
+
+import IconCheckCircle from "~/components/app/spotlight/entry/IconSelected.vue"
+import { useToast } from "~/composables/toast"
+import IconCircle from "~icons/lucide/circle"
+
+type Doc = {
+  text: string | string[]
+  alternates: string[]
+  icon: object | Component
+  excludeFromSearch?: boolean
+}
+
+type SelectedEnv = {
+  selected?: boolean
+} & (SelectedEnvironmentIndex & { type: "WORKSPACE_ENV" })
+
+/**
+ *
+ * This searcher is responsible for providing environments related actions on the spotlight results.
+ *
+ * NOTE: Initializing this service registers it as a searcher with the Spotlight Service.
+ */
+export class EnvironmentsSpotlightSearcherService extends StaticSpotlightSearcherService<Doc> {
+  public static readonly ID = "ENVIRONMENTS_SPOTLIGHT_SEARCHER_SERVICE"
+
+  private t = getI18n()
+
+  public readonly searcherID = "environments"
+  public searcherSectionTitle = this.t("spotlight.environments.title")
+
+  private readonly spotlight = this.bind(SpotlightService)
+
+  private selectedEnvIndex = useStreamStatic(
+    selectedEnvironmentIndex$,
+    {
+      type: "NO_ENV_SELECTED",
+    },
+    () => {
+      /* noop */
+    }
+  )[0]
+
+  private selectedEnv = useStreamStatic(currentEnvironment$, null, () => {
+    /* noop */
+  })[0]
+
+  private hasSelectedEnv = computed(
+    () => this.selectedEnvIndex.value?.type !== "NO_ENV_SELECTED"
+  )
+
+  private documents: Record<string, Doc> = reactive({
+    new_environment: {
+      text: [
+        this.t("spotlight.environments.title"),
+        this.t("spotlight.environments.new"),
+      ],
+      alternates: ["new", "environment"],
+      icon: markRaw(IconLayers),
+    },
+    new_environment_variable: {
+      text: [
+        this.t("spotlight.environments.title"),
+        this.t("spotlight.environments.new_variable"),
+      ],
+      alternates: ["new", "environment", "variable"],
+      icon: markRaw(IconLayers),
+    },
+    edit_selected_env: {
+      text: [
+        this.t("spotlight.environments.title"),
+        this.t("spotlight.environments.edit"),
+      ],
+      alternates: ["edit", "environment"],
+      icon: markRaw(IconEdit),
+      excludeFromSearch: computed(() => !this.hasSelectedEnv.value),
+    },
+    delete_selected_env: {
+      text: [
+        this.t("spotlight.environments.title"),
+        this.t("spotlight.environments.delete"),
+      ],
+      alternates: ["delete", "environment"],
+      icon: markRaw(IconTrash2),
+      excludeFromSearch: computed(() => !this.hasSelectedEnv.value),
+    },
+    duplicate_selected_env: {
+      text: [
+        this.t("spotlight.environments.title"),
+        this.t("spotlight.environments.duplicate"),
+      ],
+      alternates: ["duplicate", "environment"],
+      icon: markRaw(IconCopy),
+      excludeFromSearch: computed(() => !this.hasSelectedEnv.value),
+    },
+    edit_global_env: {
+      text: [
+        this.t("spotlight.environments.title"),
+        this.t("spotlight.environments.edit_global"),
+      ],
+      alternates: ["edit", "global", "environment"],
+      icon: markRaw(IconEdit),
+    },
+    duplicate_global_env: {
+      text: [
+        this.t("spotlight.environments.title"),
+        this.t("spotlight.environments.duplicate_global"),
+      ],
+      alternates: ["duplicate", "global", "environment"],
+      icon: markRaw(IconCopy),
+    },
+  })
+
+  // TODO: This pattern is no longer recommended in dioc > 3, move to something else
+  constructor(c: Container) {
+    super(c, {
+      searchFields: ["text", "alternates"],
+      fieldWeights: {
+        text: 2,
+        alternates: 1,
+      },
+    })
+  }
+
+  override onServiceInit() {
+    this.setDocuments(this.documents)
+    this.spotlight.registerSearcher(this)
+  }
+
+  protected getSearcherResultForSearchResult(
+    result: SearchResult<Doc>
+  ): SpotlightSearcherResult {
+    return {
+      id: result.id,
+      icon: result.doc.icon,
+      text: { type: "text", text: result.doc.text },
+      score: result.score,
+    }
+  }
+
+  private getSelectedText() {
+    const selection = window.getSelection()
+    return selection?.toString() ?? ""
+  }
+
+  duplicateGlobalEnv() {
+    createEnvironment(
+      `Global - ${this.t("action.duplicate")}`,
+      cloneDeep(getGlobalVariables())
+    )
+  }
+
+  duplicateSelectedEnv() {
+    if (this.selectedEnvIndex.value?.type === "NO_ENV_SELECTED") return
+
+    if (this.selectedEnvIndex.value?.type === "WORKSPACE_ENV") {
+      duplicateEnvironment(this.selectedEnvIndex.value.index)
+    }
+  }
+
+  public onDocSelected(id: string): void {
+    switch (id) {
+      case "new_environment":
+        invokeAction(`modals.environment.new`)
+        break
+      case "new_environment_variable":
+        invokeAction(`modals.environment.add`, {
+          envName: "",
+          variableName: this.getSelectedText(),
+        })
+        break
+      case "edit_selected_env":
+        if (this.selectedEnv.value) {
+          invokeAction(`modals.my.environment.edit`, {
+            envName: this.selectedEnv.value.name,
+          })
+        }
+        break
+      case "delete_selected_env":
+        invokeAction(`modals.environment.delete-selected`)
+        break
+      case "duplicate_selected_env":
+        this.duplicateSelectedEnv()
+        break
+      case "edit_global_env":
+        invokeAction(`modals.global.environment.update`, {})
+        break
+      case "duplicate_global_env":
+        this.duplicateGlobalEnv()
+        break
+    }
+  }
+}
+
+/**
+ * This searcher is responsible for searching through the environment.
+ * And switching between them.
+ */
+export class SwitchEnvSpotlightSearcherService
+  extends Service
+  implements SpotlightSearcher
+{
+  public static readonly ID = "SWITCH_ENV_SPOTLIGHT_SEARCHER_SERVICE"
+
+  private t = getI18n()
+  private toast = useToast()
+
+  public searcherID = "switch_env"
+  public searcherSectionTitle = this.t("tab.environments")
+
+  private readonly spotlight = this.bind(SpotlightService)
+
+  override onServiceInit() {
+    this.spotlight.registerSearcher(this)
+  }
+
+  private selectedEnvIndex = useStreamStatic(
+    selectedEnvironmentIndex$,
+    {
+      type: "NO_ENV_SELECTED",
+    },
+    () => {
+      /* noop */
+    }
+  )[0]
+
+  private environmentSearchable = useStreamStatic(
+    activeActions$.pipe(
+      map((actions) => actions.includes("modals.environment.add"))
+    ),
+    activeActions$.value.includes("modals.environment.add"),
+    () => {
+      /* noop */
+    }
+  )[0]
+
+  createSearchSession(
+    query: Readonly<Ref<string>>
+  ): [Ref<SpotlightSearcherSessionState>, () => void] {
+    const loading = ref(false)
+    const results = ref<SpotlightSearcherResult[]>([])
+
+    const minisearch = new MiniSearch({
+      fields: ["name", "alternates"],
+      storeFields: ["name"],
+    })
+
+    if (this.environmentSearchable.value) {
+      minisearch.addAll(
+        environmentsStore.value.environments.map((entry, index) => {
+          const id: SelectedEnv = {
+            type: "WORKSPACE_ENV",
+            index,
+          }
+
+          if (
+            this.selectedEnvIndex.value?.type === "WORKSPACE_ENV" &&
+            this.selectedEnvIndex.value.index === index
+          ) {
+            id.selected = true
+          }
+          return {
+            id: JSON.stringify(id),
+            name: entry.name,
+            alternates: ["environment", "change", entry.name],
+          }
+        })
+      )
+    }
+
+    const scopeHandle = effectScope()
+
+    scopeHandle.run(() => {
+      watch(
+        [query],
+        ([query]) => {
+          results.value = minisearch
+            .search(query, {
+              prefix: true,
+              fuzzy: true,
+              boost: {
+                reltime: 2,
+              },
+              weights: {
+                fuzzy: 0.2,
+                prefix: 0.8,
+              },
+            })
+            .map(({ id, score, name }) => {
+              return {
+                id: id,
+                icon: markRaw(
+                  JSON.parse(id).selected ? IconCheckCircle : IconCircle
+                ),
+                score: score,
+                text: {
+                  type: "text",
+                  text: [this.t("environment.set"), name],
+                },
+              }
+            })
+        },
+        { immediate: true }
+      )
+    })
+
+    const onSessionEnd = () => {
+      scopeHandle.stop()
+      minisearch.removeAll()
+    }
+
+    const resultObj = computed<SpotlightSearcherSessionState>(() => ({
+      loading: loading.value,
+      results: results.value,
+    }))
+
+    return [resultObj, onSessionEnd]
+  }
+
+  onResultSelect(result: SpotlightSearcherResult): void {
+    try {
+      const selectedEnv = JSON.parse(result.id) as SelectedEnv
+
+      if (selectedEnv.type === "WORKSPACE_ENV") {
+        setSelectedEnvironmentIndex({
+          type: "WORKSPACE_ENV",
+          index: selectedEnv.index,
+        })
+      }
+    } catch (e) {
+      console.error((e as Error).message)
+      this.toast.error(this.t("error.something_went_wrong"))
+    }
+  }
+}

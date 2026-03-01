@@ -1,0 +1,107 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "shell:allow-open",
+    "shell:allow-execute",
+    "shell:allow-spawn",
+    {
+      "identifier": "http:default",
+      "allow": [
+        "https://github.com/login/oauth/access_token",
+        "https://api.github.com/user",
+        "https://gitlab.com/oauth/token",
+        "https://gitlab.com/api/v4/user",
+        "https://gitee.com/oauth/token",
+        "https://gitee.com/api/v5/user",
+        "https://bitbucket.org/site/oauth2/access_token",
+        "https://api.bitbucket.org/2.0/user"
+      ]
+    },
+    "store:default",
+    "dialog:default",
+    "process:default",
+    "updater:default",
+    "fs:default",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-read-dir",
+    "fs:allow-mkdir",
+    "fs:allow-stat",
+    "fs:allow-exists",
+    "fs:allow-remove",
+    "fs:allow-copy-file",
+    "fs:allow-rename",
+    "fs:write-all",
+    "fs:allow-appdata-write-recursive",
+    "fs:allow-appconfig-write-recursive",
+    "fs:allow-applocaldata-write-recursive",
+    "fs:allow-appcache-write-recursive",
+    "fs:allow-applog-write-recursive",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-stat",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-rename",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-watch",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "fs:allow-unwatch",
+      "allow": [{ "path": "**" }, { "path": "**/.*" }, { "path": "$APPDATA/**" }, { "path": "$APPDATA/**/.*" }]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "git", "cmd": "git", "args": true },
+        { "name": "sh", "cmd": "sh", "args": true }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        { "name": "git", "cmd": "git", "args": true },
+        { "name": "sh", "cmd": "sh", "args": true }
+      ]
+    },
+    "deep-link:default",
+    "relay:default"
+  ]
+}

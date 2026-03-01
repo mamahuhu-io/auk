@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@auk/common": ["./src/types/auk-common.d.ts"],
+      "@auk/common/*": ["./src/types/auk-common.d.ts"],
+      "@auk/common/src/*": ["./src/types/auk-common.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "exclude": ["../auk-common/**", "node_modules", "src/components.d.ts"]
+}
