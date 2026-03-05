@@ -4,6 +4,7 @@ pub mod dialog;
 pub mod error;
 pub mod logger;
 pub mod menu;
+pub mod oauth;
 pub mod path;
 pub mod server;
 pub mod updater;
@@ -206,6 +207,7 @@ pub fn run() {
             updater::get_download_progress,
             updater::is_portable_mode,
             menu::set_app_menu,
+            oauth::oauth_http_request,
             path::get_config_dir,
             path::get_latest_dir,
             path::get_instance_dir,

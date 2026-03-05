@@ -4,6 +4,7 @@
  */
 
 import { ref } from "vue"
+import * as E from "fp-ts/Either"
 import type {
   GitOAuthProvider,
   GitOAuthConfig,
@@ -23,7 +24,8 @@ import {
   getOAuthAccount,
   isTokenExpired,
 } from "./oauth-store"
-import { getPlatformFetch } from "~/platform/capabilities"
+import { parseJsonPayload, sendOAuthRequest } from "./oauth-transport"
+import { Store } from "~/kernel/store"
 import {
   storageGetItem,
   storageRemoveItem,
@@ -31,14 +33,13 @@ import {
 } from "./browser-storage"
 
 const PENDING_AUTH_KEY = "git_oauth_pending"
-export const PENDING_AUTH_TIMEOUT_MS = 2 * 60 * 1000
+const PENDING_AUTH_NAMESPACE = "git.oauth"
+const PENDING_AUTH_STORE_KEY = "pending_auth"
+// Keep pending OAuth state long enough for login, 2FA and account chooser steps.
+export const PENDING_AUTH_TIMEOUT_MS = 10 * 60 * 1000
 
 // Current authentication state
 const pendingAuth = ref<GitOAuthState | null>(null)
-
-async function getNetworkFetch(): Promise<typeof fetch> {
-  return getPlatformFetch()
-}
 
 /**
  * Generate cryptographically random string
@@ -84,20 +85,114 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 }
 
 /**
- * Save pending auth state to localStorage.
+ * Build a safe pending state that excludes client secrets.
+ */
+function toSafePendingAuthState(state: GitOAuthState): GitOAuthState {
+  const { clientSecret: _ignored, ...safeConfig } = state.config
+  return { ...state, config: safeConfig }
+}
+
+function isPendingAuthExpired(state: GitOAuthState): boolean {
+  return (
+    typeof state.startedAt !== "number" ||
+    Date.now() - state.startedAt > PENDING_AUTH_TIMEOUT_MS
+  )
+}
+
+function hydratePendingAuthSecret(state: GitOAuthState): GitOAuthState {
+  const creds = getOAuthClientCredentials(state.provider)
+  if (creds?.clientSecret) {
+    return {
+      ...state,
+      config: { ...state.config, clientSecret: creds.clientSecret },
+    }
+  }
+  return state
+}
+
+function isKernelStoreAvailable(): boolean {
+  return typeof window !== "undefined" && Boolean(window.__KERNEL__?.store)
+}
+
+async function savePendingAuthToStore(state: GitOAuthState): Promise<void> {
+  if (!isKernelStoreAvailable()) return
+  try {
+    const result = await Store.set(
+      PENDING_AUTH_NAMESPACE,
+      PENDING_AUTH_STORE_KEY,
+      toSafePendingAuthState(state)
+    )
+    if (E.isLeft(result)) {
+      console.error(
+        "[GitOAuth] Failed to save pending auth to store:",
+        result.left
+      )
+    }
+  } catch (error) {
+    console.error("[GitOAuth] Failed to save pending auth to store:", error)
+  }
+}
+
+async function loadPendingAuthFromStore(): Promise<GitOAuthState | null> {
+  if (!isKernelStoreAvailable()) return null
+  try {
+    const result = await Store.get<GitOAuthState>(
+      PENDING_AUTH_NAMESPACE,
+      PENDING_AUTH_STORE_KEY
+    )
+    if (E.isLeft(result)) {
+      console.error(
+        "[GitOAuth] Failed to load pending auth from store:",
+        result.left
+      )
+      return null
+    }
+    const stored = result.right
+    if (!stored) return null
+    if (isPendingAuthExpired(stored)) {
+      await clearPendingAuthInStore()
+      return null
+    }
+    return hydratePendingAuthSecret(stored)
+  } catch (error) {
+    console.error("[GitOAuth] Failed to load pending auth from store:", error)
+    return null
+  }
+}
+
+async function clearPendingAuthInStore(): Promise<void> {
+  if (!isKernelStoreAvailable()) return
+  try {
+    const result = await Store.remove(
+      PENDING_AUTH_NAMESPACE,
+      PENDING_AUTH_STORE_KEY
+    )
+    if (E.isLeft(result)) {
+      console.error(
+        "[GitOAuth] Failed to clear pending auth in store:",
+        result.left
+      )
+    }
+  } catch (error) {
+    console.error("[GitOAuth] Failed to clear pending auth in store:", error)
+  }
+}
+
+/**
+ * Save pending auth state to local storage.
  * Strips clientSecret from the config — it will be re-resolved from
  * environment variables when the callback is handled.
  */
-function savePendingAuth(state: GitOAuthState): void {
+async function savePendingAuth(state: GitOAuthState): Promise<void> {
   pendingAuth.value = state
+  const safeState = toSafePendingAuthState(state)
   try {
-    // Strip clientSecret before persisting to localStorage
-    const { clientSecret: _, ...safeConfig } = state.config
-    const safeState = { ...state, config: safeConfig }
+    // Strip clientSecret before persisting to storage.
     storageSetItem(PENDING_AUTH_KEY, JSON.stringify(safeState))
   } catch (error) {
     console.error("[GitOAuth] Failed to save pending auth:", error)
   }
+  await savePendingAuthToStore(state)
 }
 
 /**
@@ -114,19 +209,11 @@ function loadPendingAuth(): GitOAuthState | null {
     const stored = storageGetItem(PENDING_AUTH_KEY)
     if (stored) {
       const parsed: GitOAuthState = JSON.parse(stored)
-      if (
-        typeof parsed.startedAt !== "number" ||
-        Date.now() - parsed.startedAt > PENDING_AUTH_TIMEOUT_MS
-      ) {
+      if (isPendingAuthExpired(parsed)) {
         clearPendingAuth()
         return null
       }
-      // Re-hydrate clientSecret from env vars
-      const creds = getOAuthClientCredentials(parsed.provider)
-      if (creds?.clientSecret) {
-        parsed.config.clientSecret = creds.clientSecret
-      }
-      pendingAuth.value = parsed
+      pendingAuth.value = hydratePendingAuthSecret(parsed)
       return pendingAuth.value
     }
   } catch (error) {
@@ -134,6 +221,29 @@ function loadPendingAuth(): GitOAuthState | null {
   }
 
   return null
+}
+
+async function loadPendingAuthForCallback(): Promise<GitOAuthState | null> {
+  const local = loadPendingAuth()
+  if (local) return local
+
+  const stored = await loadPendingAuthFromStore()
+  if (!stored) return null
+
+  pendingAuth.value = stored
+  try {
+    storageSetItem(
+      PENDING_AUTH_KEY,
+      JSON.stringify(toSafePendingAuthState(stored))
+    )
+  } catch (error) {
+    console.error(
+      "[GitOAuth] Failed to rehydrate pending auth to local storage:",
+      error
+    )
+  }
+
+  return stored
 }
 
 /**
@@ -146,6 +256,17 @@ function clearPendingAuth(): void {
   } catch (error) {
     console.error("[GitOAuth] Failed to clear pending auth:", error)
   }
+  void clearPendingAuthInStore()
+}
+
+async function clearPendingAuthForCallback(): Promise<void> {
+  pendingAuth.value = null
+  try {
+    storageRemoveItem(PENDING_AUTH_KEY)
+  } catch (error) {
+    console.error("[GitOAuth] Failed to clear pending auth:", error)
+  }
+  await clearPendingAuthInStore()
 }
 
 /**
@@ -179,7 +300,7 @@ export async function startOAuthFlow(
     config,
     startedAt: Date.now(),
   }
-  savePendingAuth(authState)
+  await savePendingAuth(authState)
 
   // Build authorization URL
   const params = new URLSearchParams({
@@ -207,21 +328,27 @@ export async function handleOAuthCallback(
   state: string
 ): Promise<GitOAuthAccount> {
   // Load and validate pending auth state
-  const authState = loadPendingAuth()
+  const authState = await loadPendingAuthForCallback()
 
   if (!authState) {
     throw new Error("No pending OAuth authentication found")
   }
 
+  console.log(
+    "[GitOAuth] Processing callback for provider:",
+    authState.provider
+  )
+
   if (authState.state !== state) {
-    clearPendingAuth()
+    await clearPendingAuthForCallback()
     throw new Error("Invalid OAuth state - possible CSRF attack")
   }
 
   // Clear pending auth immediately
-  clearPendingAuth()
+  await clearPendingAuthForCallback()
 
   // Exchange code for token
+  console.log("[GitOAuth] Exchanging authorization code for token")
   const token = await exchangeCodeForToken(
     code,
     authState.codeVerifier,
@@ -230,9 +357,11 @@ export async function handleOAuthCallback(
   )
 
   // Fetch user info
+  console.log("[GitOAuth] Fetching OAuth user info")
   const user = await fetchUserInfo(authState.config, token.accessToken)
 
   // Save and return account
+  console.log("[GitOAuth] Saving OAuth account:", user.username)
   const account = await saveOAuthAccount(authState.provider, user, token)
 
   return account
@@ -264,23 +393,27 @@ async function exchangeCodeForToken(
     body.append("client_secret", config.clientSecret)
   }
 
-  const networkFetch = await getNetworkFetch()
-  const response = await networkFetch(config.tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
+  console.log("[GitOAuth] Sending token exchange request to:", config.tokenUrl)
+  const { status, body: responseText } = await sendOAuthRequest(
+    {
+      url: config.tokenUrl,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: body.toString(),
     },
-    body: body.toString(),
-  })
+    "OAuth token exchange response"
+  )
 
-  if (!response.ok) {
-    const errorText = await response.text()
+  if (status < 200 || status >= 300) {
+    const errorText = responseText
     console.error("[GitOAuth] Token exchange failed:", errorText)
-    throw new Error(`Token exchange failed: ${response.status}`)
+    throw new Error(`Token exchange failed: ${status}`)
   }
 
-  const data = await response.json()
+  const data = parseOAuthTokenResponse(responseText)
 
   // Handle GitHub's non-standard response format
   if (data.error) {
@@ -291,12 +424,43 @@ async function exchangeCodeForToken(
     provider: config.provider,
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    expiresAt: data.expires_in
-      ? new Date(Date.now() + data.expires_in * 1000)
-      : undefined,
+    expiresAt: normalizeExpiresAt(data.expires_in),
     tokenType: data.token_type || "bearer",
     scope: data.scope || config.scopes.join(" "),
   }
+}
+
+function parseOAuthTokenResponse(payload: string): Record<string, any> {
+  if (!payload) return {}
+
+  try {
+    const parsed = JSON.parse(payload)
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, any>
+    }
+  } catch {
+    // Fall back to urlencoded parsing (GitHub may return this even with JSON Accept).
+  }
+
+  const params = new URLSearchParams(payload)
+  const result: Record<string, string> = {}
+  params.forEach((value, key) => {
+    result[key] = value
+  })
+  return result
+}
+
+function normalizeExpiresAt(expiresIn: unknown): Date | undefined {
+  if (typeof expiresIn === "number" && Number.isFinite(expiresIn)) {
+    return new Date(Date.now() + expiresIn * 1000)
+  }
+  if (typeof expiresIn === "string") {
+    const parsed = Number(expiresIn)
+    if (Number.isFinite(parsed)) {
+      return new Date(Date.now() + parsed * 1000)
+    }
+  }
+  return undefined
 }
 
 /**
@@ -306,19 +470,27 @@ async function fetchUserInfo(
   config: GitOAuthConfig,
   accessToken: string
 ): Promise<GitOAuthUser> {
-  const networkFetch = await getNetworkFetch()
-  const response = await networkFetch(config.userInfoUrl, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
+  console.log("[GitOAuth] Sending user info request to:", config.userInfoUrl)
+  const { status, body } = await sendOAuthRequest(
+    {
+      url: config.userInfoUrl,
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
     },
-  })
+    "OAuth user info response"
+  )
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch user info: ${response.status}`)
+  if (status < 200 || status >= 300) {
+    throw new Error(`Failed to fetch user info: ${status}`)
   }
 
-  const data = await response.json()
+  const data = parseJsonPayload<Record<string, unknown>>(
+    body,
+    "OAuth user info response"
+  )
 
   // Parse user info based on provider
   return parseUserInfo(config.provider, data)
@@ -411,22 +583,29 @@ export async function refreshOAuthToken(
   }
 
   try {
-    const networkFetch = await getNetworkFetch()
-    const response = await networkFetch(config.tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
+    console.log("[GitOAuth] Sending token refresh request to:", config.tokenUrl)
+    const { status, body: responseBody } = await sendOAuthRequest(
+      {
+        url: config.tokenUrl,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: body.toString(),
       },
-      body: body.toString(),
-    })
+      "OAuth token refresh response"
+    )
 
-    if (!response.ok) {
-      console.error("[GitOAuth] Token refresh failed:", response.status)
+    if (status < 200 || status >= 300) {
+      console.error("[GitOAuth] Token refresh failed:", status)
       return null
     }
 
-    const data = await response.json()
+    const data = parseJsonPayload<Record<string, any>>(
+      responseBody,
+      "OAuth token refresh response"
+    )
 
     if (data.error) {
       console.error("[GitOAuth] Token refresh error:", data.error)

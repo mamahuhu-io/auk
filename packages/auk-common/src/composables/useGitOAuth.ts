@@ -59,7 +59,6 @@ export function useGitOAuth() {
   const authProvider = ref<GitOAuthProvider | null>(null)
 
   // Cleanup functions
-  let _cleanupCallbackHandler: (() => void) | null = null
   let cleanupSuccessListener: (() => void) | null = null
   let cleanupErrorListener: (() => void) | null = null
   let authTimeoutId: ReturnType<typeof setTimeout> | null = null
@@ -75,13 +74,17 @@ export function useGitOAuth() {
   onMounted(async () => {
     // Initialize deep link handler
     try {
-      _cleanupCallbackHandler = await initOAuthCallbackHandler()
+      await initOAuthCallbackHandler()
     } catch (error) {
       console.error("[GitOAuth] Failed to initialize callback handler:", error)
     }
 
     // Listen for OAuth success
     cleanupSuccessListener = onOAuthSuccess((event) => {
+      const shouldHandleSuccess =
+        isAuthenticating.value && authProvider.value === event.account.provider
+      if (!shouldHandleSuccess) return
+
       clearAuthTimeout()
       isAuthenticating.value = false
       authError.value = null
@@ -97,6 +100,8 @@ export function useGitOAuth() {
 
     // Listen for OAuth errors
     cleanupErrorListener = onOAuthError((event) => {
+      if (!isAuthenticating.value) return
+
       clearAuthTimeout()
       isAuthenticating.value = false
       authError.value = event.errorDescription || event.error
@@ -164,7 +169,7 @@ export function useGitOAuth() {
 
       authTimeoutId = setTimeout(() => {
         if (!isAuthenticating.value) return
-        cancelPendingOAuth()
+        // Don't clear pending flow here: callback may arrive a bit later.
         isAuthenticating.value = false
         authError.value = t("workspace.git_oauth_timeout")
         authProvider.value = null

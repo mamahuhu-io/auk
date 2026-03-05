@@ -4,17 +4,14 @@
  */
 
 import type { GitOAuthConfig, GitOAuthProvider } from "./types"
+import { OAUTH_PROVIDER_ENDPOINTS } from "./oauth-endpoints"
 
 /**
  * GitHub OAuth configuration
  */
 export const GITHUB_OAUTH_CONFIG: Omit<GitOAuthConfig, "clientId"> = {
   provider: "github",
-  scopes: ["repo", "read:user", "user:email"],
-  authUrl: "https://github.com/login/oauth/authorize",
-  tokenUrl: "https://github.com/login/oauth/access_token",
-  apiUrl: "https://api.github.com",
-  userInfoUrl: "https://api.github.com/user",
+  ...OAUTH_PROVIDER_ENDPOINTS.github,
 }
 
 /**
@@ -22,11 +19,7 @@ export const GITHUB_OAUTH_CONFIG: Omit<GitOAuthConfig, "clientId"> = {
  */
 export const GITLAB_OAUTH_CONFIG: Omit<GitOAuthConfig, "clientId"> = {
   provider: "gitlab",
-  scopes: ["read_user", "read_repository", "write_repository", "api"],
-  authUrl: "https://gitlab.com/oauth/authorize",
-  tokenUrl: "https://gitlab.com/oauth/token",
-  apiUrl: "https://gitlab.com/api/v4",
-  userInfoUrl: "https://gitlab.com/api/v4/user",
+  ...OAUTH_PROVIDER_ENDPOINTS.gitlab,
 }
 
 /**
@@ -34,11 +27,7 @@ export const GITLAB_OAUTH_CONFIG: Omit<GitOAuthConfig, "clientId"> = {
  */
 export const GITEE_OAUTH_CONFIG: Omit<GitOAuthConfig, "clientId"> = {
   provider: "gitee",
-  scopes: ["user_info", "projects", "pull_requests", "issues"],
-  authUrl: "https://gitee.com/oauth/authorize",
-  tokenUrl: "https://gitee.com/oauth/token",
-  apiUrl: "https://gitee.com/api/v5",
-  userInfoUrl: "https://gitee.com/api/v5/user",
+  ...OAUTH_PROVIDER_ENDPOINTS.gitee,
 }
 
 /**
@@ -46,11 +35,17 @@ export const GITEE_OAUTH_CONFIG: Omit<GitOAuthConfig, "clientId"> = {
  */
 export const BITBUCKET_OAUTH_CONFIG: Omit<GitOAuthConfig, "clientId"> = {
   provider: "bitbucket",
-  scopes: ["account", "repository", "repository:write"],
-  authUrl: "https://bitbucket.org/site/oauth2/authorize",
-  tokenUrl: "https://bitbucket.org/site/oauth2/access_token",
-  apiUrl: "https://api.bitbucket.org/2.0",
-  userInfoUrl: "https://api.bitbucket.org/2.0/user",
+  ...OAUTH_PROVIDER_ENDPOINTS.bitbucket,
+}
+
+const OAUTH_PROVIDER_CONFIGS: Record<
+  GitOAuthProvider,
+  Omit<GitOAuthConfig, "clientId">
+> = {
+  github: GITHUB_OAUTH_CONFIG,
+  gitlab: GITLAB_OAUTH_CONFIG,
+  gitee: GITEE_OAUTH_CONFIG,
+  bitbucket: BITBUCKET_OAUTH_CONFIG,
 }
 
 /**
@@ -61,24 +56,7 @@ export function getOAuthProviderConfig(
   clientId: string,
   clientSecret?: string
 ): GitOAuthConfig {
-  let baseConfig: Omit<GitOAuthConfig, "clientId">
-
-  switch (provider) {
-    case "github":
-      baseConfig = GITHUB_OAUTH_CONFIG
-      break
-    case "gitlab":
-      baseConfig = GITLAB_OAUTH_CONFIG
-      break
-    case "gitee":
-      baseConfig = GITEE_OAUTH_CONFIG
-      break
-    case "bitbucket":
-      baseConfig = BITBUCKET_OAUTH_CONFIG
-      break
-    default:
-      throw new Error(`Unsupported OAuth provider: ${provider}`)
-  }
+  const baseConfig = OAUTH_PROVIDER_CONFIGS[provider]
 
   return {
     ...baseConfig,

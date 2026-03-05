@@ -22,6 +22,7 @@ tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-shell = { version = "2.3.5", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = [] }
+reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-appender = { version = "0.2.3" }

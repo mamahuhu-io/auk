@@ -3,7 +3,7 @@
  * Handles deep link callbacks from OAuth authorization
  */
 
-import { handleOAuthCallback, hasPendingOAuth } from "./oauth-auth"
+import { handleOAuthCallback } from "./oauth-auth"
 import type { GitOAuthAccount } from "./types"
 import { listenDesktopEvent } from "~/platform/capabilities"
 
@@ -23,6 +23,7 @@ export const GIT_OAUTH_ERROR_EVENT = "git-oauth-error"
 
 // Track if handler is initialized
 let isInitialized = false
+const processingCallbacks = new Set<string>()
 
 /**
  * Parse OAuth callback URL
@@ -91,12 +92,6 @@ async function handleDeepLink(url: string): Promise<void> {
     return
   }
 
-  // Check if we have a pending OAuth flow
-  if (!hasPendingOAuth()) {
-    console.warn("[GitOAuth] No pending OAuth flow, ignoring callback")
-    return
-  }
-
   const { code, state, error, errorDescription } = parseCallbackUrl(url)
 
   // Handle OAuth error
@@ -129,6 +124,14 @@ async function handleDeepLink(url: string): Promise<void> {
     return
   }
 
+  const callbackKey = `${state}:${code}`
+  if (processingCallbacks.has(callbackKey)) {
+    console.warn("[GitOAuth] Duplicate OAuth callback received, ignoring")
+    return
+  }
+
+  processingCallbacks.add(callbackKey)
+
   try {
     // Process the OAuth callback
     const account = await handleOAuthCallback(code, state)
@@ -154,6 +157,8 @@ async function handleDeepLink(url: string): Promise<void> {
     window.dispatchEvent(
       new CustomEvent(GIT_OAUTH_ERROR_EVENT, { detail: errorEvent })
     )
+  } finally {
+    processingCallbacks.delete(callbackKey)
   }
 }
 
